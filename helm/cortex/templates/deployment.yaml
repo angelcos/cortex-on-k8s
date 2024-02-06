@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cortex.fullname" . }}
+  labels:
+    {{- include "cortex.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cortex.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "cortex.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cortex.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- if .Values.elasticsearch.enabled }}
+        - name: wait-elasticsearch
+          image: badouralix/curl-jq:alpine
+          envFrom:
+            - configMapRef:
+                name: {{ include "cortex.fullname" . }}
+            - secretRef:
+                name: {{ include "elasticsearch.uname" .Subcharts.elasticsearch }}-credentials
+          command:
+            - sh
+            - '-c'
+            - |
+              until [ "$(curl -k -s -u ${username}:${password} "${es_uri}/_cluster/health?pretty" | jq -r .status)" = "green" ]; do
+                echo "Waiting for Elasticsearch..."
+                sleep 3
+              done; echo "Elasticsearch is now in green status!"
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          envFrom:
+            - configMapRef:
+                name: {{ include "cortex.fullname" . }}
+            - secretRef:
+                name: {{ include "elasticsearch.uname" .Subcharts.elasticsearch }}-credentials
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.elasticsearch.enabled }}
+          volumeMounts:
+            - name: elasticsearch-certs
+              mountPath: /usr/share/elasticsearch/config/certs
+              readOnly: true
+            #- name: elasticsearch-config
+            #  mountPath: "/etc/cortex"
+          {{- end }}
+      {{- if .Values.elasticsearch.enabled }}
+      volumes:
+        - name: elasticsearch-certs
+          secret:
+           secretName: {{ include "elasticsearch.uname" .Subcharts.elasticsearch }}-certs
+        #- name: elasticsearch-config
+        #  configMap:
+        #    name: {{ include "cortex.fullname" . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

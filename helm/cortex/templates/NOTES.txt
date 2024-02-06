@@ -1,0 +1,23 @@
+==========================================================================
+
+Helm chart: cortex-stack
+
+Cortex version: {{ (index .Values "image" "tag") }}
+
+    image: {{ (index .Values "image" "repository") }}
+    autoscaling enabled: {{ (index .Values "autoscaling" "enabled") }}
+       minReplicas: {{ index .Values.autoscaling.minReplicas }}
+       maxReplicas: {{ index .Values.autoscaling.maxReplicas }}
+
+{{ if (index .Values.elasticsearch.enabled) }}    
+Elasticsearch version: {{ (index .Values "elasticsearch" "imageTag") }}
+
+    image: {{ (index .Values "elasticsearch" "image") }}
+    mode enabled: cluster
+       minReplicas: {{ index .Values.elasticsearch.replicas }}
+       minimumMasterNodes: {{ index .Values.elasticsearch.minimumMasterNodes }}
+{{- end }}
+
+Deploy Complete.
+
+==========================================================================
